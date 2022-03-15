@@ -4,7 +4,7 @@ requests.utils = _requests.utils
 import time
 import sys
 import asyncio
-#import websockets
+import websockets
 import json
 import copy
 from src.chess_data import ChessData
@@ -15,6 +15,7 @@ class ChessClient (ChessData):
 
 	def __init__(self, clientname, PHPSESSID = None):
 		super().__init__(clientname)
+		self._ws = None
 		self.PHPSESSID = PHPSESSID
 		self._session = requests.Session()
 		self._is_running = False
@@ -75,14 +76,27 @@ class ChessClient (ChessData):
 		return len(valid_subscriptions)
 
 	async def _raw_send(self, data):
-		self.log("RAW SEND")
+		if len(data) != 0:
+			self.log("RAW SEND")
+		if self._ws == None:
+			self._ws = await websockets.connect(self.COMETD_WEBSOCKET, extra_headers = {"cookie" : f"PHPSESSID={self.PHPSESSID}"})
 		for i in data:
+			await self._ws.send(json.dumps(i))
 			with open("log2.txt", "a") as f:
 				f.write(f"SEND ({time.time()}):\n")
 				f.write(json.dumps(i, indent = 1, sort_keys = True))
 				f.write("\n\n")
-		r = await self._session.post(self.COMETD_URL, json = data)
-		for i in r.json():
+		#r = await self._session.post(self.COMETD_URL, json = data)
+		res = []
+		while True:
+			try:
+				d = await asyncio.wait_for(self._ws.recv(), timeout = 0.1)
+				res.extend(json.loads(d))
+			except asyncio.TimeoutError:
+				break
+		if len(res) != 0:
+			self.log(res)
+		for i in res:
 			with open("log2.txt", "a") as f:
 				f.write(f"GET ({time.time()}):\n")
 				f.write(json.dumps(i, indent = 1, sort_keys = True))
@@ -91,7 +105,7 @@ class ChessClient (ChessData):
 		#for i in r.json():
 			#self.log_json(i)
 			#self.log("")
-		return r.json()
+		return res
 
 	def exec_async(self, coro):
 		return self._event_loop.create_task(coro)
@@ -108,6 +122,7 @@ class ChessClient (ChessData):
 		id = int(data["id"])
 		while id not in self._id_events:
 			await self.short_sleep()
+			await self._flush_sends()
 		ret = self._id_events[id]
 		del self._id_events[id]
 		return ret
@@ -127,7 +142,7 @@ class ChessClient (ChessData):
 			return
 		self._flushing_sends = True
 		self.log("=" * 50)
-		while len(self._send_data) == 0:
+		if len(self._send_data) == 0:
 			await self.short_sleep()
 		send_data = self._send_data
 		self._send_data = []
@@ -142,7 +157,7 @@ class ChessClient (ChessData):
 		if PHPSESSID != None:
 			self.PHPSESSID = PHPSESSID
 		assert self.PHPSESSID != None
-		self._session.cookies.set("PHPSESSID", PHPSESSID)
+		#self._session.cookies.set("PHPSESSID", PHPSESSID)
 		self._is_running = True
 		await self._do_handshake()
 		while self._is_running:

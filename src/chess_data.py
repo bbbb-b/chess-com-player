@@ -7,6 +7,7 @@ class ChessData:
 	LIVE_BASE_URL = "https://live.chess.com"
 	HOME_URL = BASE_URL + "/home"
 	COMETD_URL = "https://live2.chess.com/cometd"
+	COMETD_WEBSOCKET = "wss://live2.chess.com/cometd"
 	LOGIN_URL = BASE_URL + "/login"
 	LOGIN_CHECK_URL = BASE_URL + "/login_check"
 	#HANDSHAKE_URL = LIVE_BASE_URL + "/cometd/handshake"
@@ -26,7 +27,7 @@ class ChessData:
 	]
 
 	def __init__(self, clientname):
-		self._connection_type = "ssl-long-polling"
+		self._connection_type = "ssl-websocket"
 		self._clientname = clientname
 		self._last_connection_id = 0
 		self._client_id = None
@@ -78,8 +79,7 @@ class ChessData:
 	def _get_connect_data(self):
 		return {
 			"ext" : self._get_ext_data(),
-			#"connectionType" : self._connection_type,
-			"connectionType" : "auto",
+			"connectionType" : self._connection_type,
 			"id" : self._get_connection_id(),
 			"clientId" : self._client_id
 		}
@@ -139,7 +139,7 @@ class ChessData:
 		return {
 			"channel" : self.GAME_CHANNEL,
 			"data" : {
-				"basetime" : 600, # minute * 60 * 10 (????)
+				"basetime" : 600, # minute * 60 * 10 (????) 
 				"timeinc" : 0,
 				"uuid" : challenge_uuid,
 				"from" : self.username,
